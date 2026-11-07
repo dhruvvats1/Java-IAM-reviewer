@@ -202,3 +202,28 @@ One important lesson was that security findings need context. For example, an ad
 ---
 
 *This project is intended for educational purposes and authorized security auditing.*
+## Limitations / future roadmap
+
+1. **Not a live AWS scanner:** SDK retrieval is the next step; don't claim it is built yet.
+2. Admin permissions come from reviewer-provided data. In production, analyze identity policies, group membership, permission boundaries and relevant organizational controls before describing effective admin rights.
+3. `last_login` in normalized mode is one provided date. AWS mode combines observed password and access key use but cannot prove there was no activity in other credential types or services.
+4. The 90-day policy is an example, not an AWS-mandated rotation policy. Add CLI-configurable thresholds later.
+5. Real compliance workflows need an approver, exceptions handling, audit trails and data governance; this is a first-pass triage tool.
+6. Security note: real AWS exports can contain account identifiers and sensitive operational metadata. Never upload live exports, credentials, or private employee records to a public repository.
+
+## Demo / interview prep
+
+See `docs/INTERVIEW_GUIDE.md` and `docs/DEADLINE_PLAN.md`.
+
+## Interactive Java + web demo
+
+The optional public dashboard runs the same Java `AuditService` behind an HTTP API and is deliberately **sample-data-only**. It supports synthetic CSV uploads, severity filtering, and CSV export. Live AWS CLI access is only used from the local private CLI; the public web service has no AWS credentials.
+
+Start locally:
+
+```bash
+bash scripts/build.sh
+java -cp target/iam-review.jar com.iamreview.WebServer
+```
+
+Open `http://localhost:8080`. For free Docker-based deployment and demo recording instructions, read [WEB_DEMO_GUIDE.md](WEB_DEMO_GUIDE.md).

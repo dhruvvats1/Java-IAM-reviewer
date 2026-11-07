@@ -1,0 +1,10 @@
+.git
+.aws
+private-data
+reports
+target
+*.pem
+*.key
+.env
+.env.*
+.DS_Store
