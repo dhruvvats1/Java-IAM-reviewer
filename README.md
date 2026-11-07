@@ -1,8 +1,8 @@
 # IAM Access Review & Security Audit Automation Tool
 
-**Java 21 | Command-line interface | CSV auditing | AWS IAM credential-report CSV support | automated tests**
+**Java 21 | Command-line interface | CSV auditing | live AWS CLI report retrieval | automated tests**
 
-A dependency-free, local Java application that performs a first-pass review of IAM-style user accounts. The tool identifies risky or review-worthy accounts and exports a CSV report with a user, check, severity, explanation and recommended action. It **does not** connect to AWS APIs or change any AWS resources.
+A dependency-free, local Java application that performs a first-pass review of IAM-style user accounts. The tool identifies risky or review-worthy accounts and exports a CSV report with a user, check, severity, explanation and recommended action. In `--aws-live` mode, Java invokes the authenticated AWS CLI to retrieve the IAM credential report automatically. It **does not** modify IAM users, policies, or access keys. This version uses the AWS CLI bridge, not the AWS SDK for Java.
 
 ## What it checks
 
@@ -21,6 +21,7 @@ These are **configurable organizational review rules in concept**, not definitiv
 
 - Java Development Kit (JDK) **21** (`java`, `javac`, and `jar` on PATH).
 - No Maven, database, web server, or extra Java libraries required.
+- For `--aws-live`, AWS CLI v2 installed, an authorized non-root IAM user signed in via `aws login`, and permissions `iam:GenerateCredentialReport` and `iam:GetCredentialReport`.
 
 ## Quick start — Windows (PowerShell / Command Prompt)
 
@@ -48,6 +49,39 @@ java -jar target/iam-review.jar sample-data/users.csv --date 2026-11-07
 
 The above sample is synthetic; `--date 2026-11-07` keeps the sample test results reproducible. The expected demo output is 8 accounts scanned and 8 findings (1 critical, 1 high, 5 medium, 1 review).
 
+## Live AWS credential-report retrieval — macOS
+
+Before running, sign in **as the dedicated, restricted IAM user**, not root:
+
+```bash
+aws sts get-caller-identity --profile iam-review --query Arn --output text
+```
+
+The ARN should end in `user/iam-audit-reader`. If login is expired, run `aws login --profile iam-review --region us-east-1` and check the ARN again.
+
+Then from the project root:
+
+```bash
+bash scripts/build.sh
+java -jar target/iam-review.jar --aws-live --profile iam-review
+```
+
+The Java application calls AWS CLI to verify that a **non-root IAM user** is authenticated, generate the credential report if needed, retrieve its base64-encoded contents, and save the private CSV to `private-data/aws-live-credential-report.csv`. It then runs the existing Java audit and writes `private-data/live-findings.csv`. Files in `private-data/` are excluded from Git. No access keys are created, printed, or embedded in source code.
+
+**If the account has only a root record:** output says `Accounts scanned: 0`, with a clear explanation that root isn't included in IAM user checks. This is not a clean security audit verdict. Use the included synthetic data to demonstrate the five user checks.
+
+**If the AWS report contains IAM users:** by default only the checks backed by AWS report fields run (MFA, activity, key age). The employee-status and admin-rights checks are **NOT ASSESSED** unless both independently verified rosters are supplied. For a complete five-check audit, use:
+
+```bash
+java -jar target/iam-review.jar --aws-live --profile iam-review \
+  --employees private-data/verified-employees.csv \
+  --admins private-data/verified-admins.csv
+```
+
+Never use sample-data rosters with real account usernames or publish real credential reports. AWS IAM credential reports do not contain employee status or effective administrator access. Avoid treating a low number of findings as proof that an AWS account is secure.
+
+For the deadline-oriented project, live retrieval uses the **AWS CLI from Java**, not `software.amazon.awssdk.services.iam.IamClient`. A future version could use the AWS SDK with Maven dependencies. The CLI is only invoked with fixed subcommands and the validated profile name, with process timeouts and no shell evaluation.
+
 ## AWS credential-report CSV mode (offline)
 
 The AWS IAM console lets authorized users export a *credential report* CSV. This project can analyze an AWS-formatted CSV file locally without making API calls. For demonstration, use **only synthetic data**:
@@ -60,7 +94,7 @@ This demo scans 3 synthetic IAM users and produces 6 findings.
 
 - `--employees`: CSV with `username,employed`. You need this because AWS does not know employee exit status.
 - `--admins`: CSV with `username,admin_rights`. The credential report does **not** disclose effective administrator rights; this is an **externally verified** synthetic roster for the demo.
-- A matching roster entry is required for every IAM user in the credential report (excluding `<root_account>`). Missing information fails closed instead of silently marking departed staff as employed.
+- When roster files are supplied, a matching entry is required for every IAM user in the report (excluding `<root_account>`). When rosters are omitted, employment and admin-rights findings are not assessed; no claim of compliance should be made.
 - Both AWS access keys are examined, and the oldest active key is used for the key-age rule. Login activity uses the most recently observed console sign-in or active access-key use. No activity information is reported as REVIEW instead of assumed to be an inactivity violation.
 - Imported AWS reports do **not** establish effective permissions, group memberships, access through roles, service-specific credentials, or activity invisible to the report.
 

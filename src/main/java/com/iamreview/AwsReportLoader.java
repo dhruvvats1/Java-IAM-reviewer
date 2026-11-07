@@ -10,8 +10,8 @@ public final class AwsReportLoader {
     private AwsReportLoader() {}
 
     public static List<Account> load(Path report, Path employeeRoster, Path adminRoster, LocalDate auditDate) throws IOException {
-        Map<String, Boolean> employeeStatus = roster(employeeRoster, "employed");
-        Map<String, Boolean> adminStatus = roster(adminRoster, "admin_rights");
+        Map<String, Boolean> employeeStatus = employeeRoster == null ? Map.of() : roster(employeeRoster, "employed");
+        Map<String, Boolean> adminStatus = adminRoster == null ? Map.of() : roster(adminRoster, "admin_rights");
         List<List<String>> rows = Csv.read(report);
         if (rows.isEmpty()) throw new IllegalArgumentException("AWS credential report is empty");
         Map<String, Integer> columns = columnMap(rows.get(0));
@@ -22,9 +22,9 @@ public final class AwsReportLoader {
             List<String> row = rows.get(r);
             if (row.size() != rows.get(0).size()) throw new IllegalArgumentException("Invalid column count at AWS report row " + (r+1));
             String user = field(row, columns, "user");
-            if (user.equals("<root_account>") || user.equals("root_account")) continue; // user-scoped analysis only
-            if (!employeeStatus.containsKey(user)) throw new IllegalArgumentException("Employee roster is missing IAM user: " + user);
-            if (!adminStatus.containsKey(user)) throw new IllegalArgumentException("Admin roster is missing IAM user: " + user);
+            if (user.equals("<root_account>") || user.equals("root_account") || user.equals("<root>")) continue; // user-scoped analysis only
+            if (employeeRoster != null && !employeeStatus.containsKey(user)) throw new IllegalArgumentException("Employee roster is missing IAM user: " + user);
+            if (adminRoster != null && !adminStatus.containsKey(user)) throw new IllegalArgumentException("Admin roster is missing IAM user: " + user);
             boolean console = truth(field(row, columns, "password_enabled"));
             boolean mfa = truth(field(row, columns, "mfa_active"));
             boolean key1 = truth(field(row, columns, "access_key_1_active"));
@@ -47,7 +47,7 @@ public final class AwsReportLoader {
                     }
                 }
             }
-            accounts.add(new Account(user, mfa, mostRecent, oldestKeyAge, adminStatus.get(user), employeeStatus.get(user),
+            accounts.add(new Account(user, mfa, mostRecent, oldestKeyAge, adminRoster != null && adminStatus.get(user), employeeRoster == null || employeeStatus.get(user),
                 console || key1 || key2, console, key1 || key2));
         }
         return accounts;

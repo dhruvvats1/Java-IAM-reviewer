@@ -14,3 +14,6 @@ credentials
 .vscode/
 *.class
 .DS_Store
+
+# locally downloaded live AWS credential reports and findings
+/private-data/

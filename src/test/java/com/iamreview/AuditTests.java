@@ -60,8 +60,32 @@ public final class AuditTests {
             Path.of("sample-data/employees.csv"), Path.of("sample-data/admins.csv"), TODAY);
         check("AWS-format sample imported", 3, awsAccounts.size());
         check("AWS-format findings", 6, new AuditService().audit(awsAccounts, TODAY).size());
+        check("AWS-format report with omitted rosters imports", 3, AwsReportLoader.load(Path.of("sample-data/aws-credential-report.csv"), null, null, TODAY).size());
         assertCondition("former employee found in AWS mode", new AuditService().audit(awsAccounts, TODAY).stream()
             .anyMatch(f -> f.user().equals("aws-charlie") && f.severity() == Finding.Severity.CRITICAL));
+        // Live retrieval is tested against a fake CLI; no AWS account is accessed during tests.
+        Path fakeCli = Files.createTempFile("fake-aws-cli", ".sh");
+        Path fetched = Files.createTempFile("fetched-aws-report", ".csv");
+        String rootCsv = "user,arn,user_creation_time,password_enabled,password_last_used,password_last_changed,password_next_rotation,mfa_active,access_key_1_active,access_key_1_last_rotated,access_key_1_last_used_date,access_key_1_last_used_region,access_key_1_last_used_service,access_key_2_active,access_key_2_last_rotated,access_key_2_last_used_date,access_key_2_last_used_region,access_key_2_last_used_service,cert_1_active,cert_1_last_rotated,cert_2_active,cert_2_last_rotated\n" +
+            "<root_account>,arn:aws:iam::123456789012:root,2024-01-01T00:00:00Z,true,2026-11-07T00:00:00Z,N/A,N/A,true,false,N/A,N/A,N/A,N/A,false,N/A,N/A,N/A,N/A,false,N/A,false,N/A\n";
+        try {
+            String encoded = java.util.Base64.getEncoder().encodeToString(rootCsv.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            String fakeScript = "#!/bin/sh\ncase \"$1 $2\" in\n" +
+                "  'sts get-caller-identity') echo 'arn:aws:iam::123456789012:user/iam-audit-reader';;\n" +
+                "  'iam generate-credential-report') echo COMPLETE;;\n" +
+                "  'iam get-credential-report') echo '" + encoded + "';;\n" +
+                "esac\n";
+            Files.writeString(fakeCli, fakeScript);
+            fakeCli.toFile().setExecutable(true);
+            new AwsCliReportFetcher(fakeCli.toString()).fetch("iam-review", fetched);
+            assertCondition("live mode retrieves report via mock CLI", Files.readString(fetched).equals(rootCsv));
+            check("root-only AWS report yields zero IAM users", 0, AwsReportLoader.load(fetched, null, null, TODAY).size());
+            Files.writeString(fakeCli, "#!/bin/sh\necho 'arn:aws:iam::123456789012:root'\n");
+            boolean refusedRoot = false;
+            try { new AwsCliReportFetcher(fakeCli.toString()).fetch("iam-review", fetched); }
+            catch (IllegalStateException e) { refusedRoot = true; }
+            assertCondition("root profile rejected by live retrieval", refusedRoot);
+        } finally { Files.deleteIfExists(fakeCli); Files.deleteIfExists(fetched); }
         System.out.println("PASS: " + tests + " automated assertions");
     }
 
