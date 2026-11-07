@@ -1,0 +1,2 @@
+username,mfa_enabled,last_login,access_key_age_days,admin_rights,employed,account_active,console_access,access_key_active
+safe-user,true,2026-11-01,10,false,true,true,true,true

@@ -1,0 +1,4 @@
+username,admin_rights
+aws-alice,false
+aws-bob,true
+aws-charlie,false

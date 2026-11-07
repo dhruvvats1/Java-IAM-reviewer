@@ -1,0 +1,16 @@
+# generated build output
+/target/
+# generated exception exports, keep only vetted examples in sample-data
+/reports/
+# secrets and local AWS configuration
+.env
+.env.*
+.aws/
+credentials
+*.pem
+*.key
+# IDE
+.idea/
+.vscode/
+*.class
+.DS_Store
